@@ -1,11 +1,16 @@
 use std::io::{BufRead, Seek, SeekFrom};
 
-use byteorder::{LittleEndian, ReadBytesExt};
+use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 
 pub trait EasyRead: ReadBytesExt + BufRead + Seek {
     #[inline]
     fn read_u32_le(&mut self) -> Result<u32, std::io::Error> {
         self.read_u32::<LittleEndian>()
+    }
+
+    #[inline]
+    fn read_u32_be(&mut self) -> Result<u32, std::io::Error> {
+        self.read_u32::<BigEndian>()
     }
 
     fn read_cstring(&mut self) -> Result<String, std::io::Error> {
