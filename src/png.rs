@@ -49,6 +49,20 @@ pub struct IHDR {
     pub interlace_method: u8,
 }
 
+pub struct Png {
+    pub chunks: Vec<Chunk>,
+    pub extra_bytes: Option<Vec<u8>>,
+}
+
+impl Png {
+    pub fn new(chunks: Vec<Chunk>, extra_bytes: Option<Vec<u8>>) -> Self {
+        Self {
+            chunks,
+            extra_bytes,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

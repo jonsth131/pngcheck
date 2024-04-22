@@ -1,12 +1,12 @@
 use crate::easy_br::EasyRead;
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Read};
 use std::str;
 
 mod easy_br;
 pub mod png;
 
-pub fn parse_file(file: File) -> Result<Vec<png::Chunk>, Box<dyn std::error::Error>> {
+pub fn parse_file(file: File) -> Result<png::Png, Box<dyn std::error::Error>> {
     let mut buf = BufReader::new(file);
 
     let signature = buf.read_bytes(8)?;
@@ -33,5 +33,12 @@ pub fn parse_file(file: File) -> Result<Vec<png::Chunk>, Box<dyn std::error::Err
         }
     }
 
-    Ok(chunks)
+    let mut extra_bytes: Vec<u8> = vec![];
+    buf.read_to_end(&mut extra_bytes)?;
+
+    if !extra_bytes.is_empty() {
+        return Ok(png::Png::new(chunks, Some(extra_bytes)));
+    }
+
+    Ok(png::Png::new(chunks, None))
 }

@@ -21,10 +21,10 @@ fn main() -> Result<(), std::io::Error> {
 
     let file = std::fs::File::open(&args[1]).expect("Failed to open file");
 
-    let parsed_file = parse_file(file);
+    let parsed_png = parse_file(file);
 
-    match parsed_file {
-        Ok(data) => print_chunks(data),
+    match parsed_png {
+        Ok(data) => print_chunks(data.chunks),
         Err(e) => println!("Error parsing file: {:?}", e),
     }
 
