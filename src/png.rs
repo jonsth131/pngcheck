@@ -1,3 +1,6 @@
+use flate2::read::ZlibDecoder;
+use std::io::Read;
+
 pub const HEADER: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
 
 pub const CRITICAL_CHUNKS: [&str; 4] = ["IHDR", "PLTE", "IDAT", "IEND"];
@@ -50,16 +53,39 @@ pub struct IHDR {
 }
 
 pub struct Png {
+    pub ihdr: Option<IHDR>,
     pub chunks: Vec<Chunk>,
     pub extra_bytes: Option<Vec<u8>>,
 }
 
 impl Png {
-    pub fn new(chunks: Vec<Chunk>, extra_bytes: Option<Vec<u8>>) -> Self {
+    pub fn new(ihdr: Option<IHDR>, chunks: Vec<Chunk>, extra_bytes: Option<Vec<u8>>) -> Self {
         Self {
+            ihdr,
             chunks,
             extra_bytes,
         }
+    }
+
+    fn get_idat_data(&self) -> Vec<u8> {
+        let mut idat_data = vec![];
+        for chunk in &self.chunks {
+            if chunk.chunk_type == "IDAT" {
+                match &chunk.data {
+                    Some(data) => idat_data.extend(data),
+                    None => (),
+                }
+            }
+        }
+        idat_data
+    }
+
+    pub fn decompress_idat_data(&self) -> Vec<u8> {
+        let idat_data = self.get_idat_data();
+        let mut zlib_decoder = ZlibDecoder::new(&idat_data[..]);
+        let mut decompressed_data = vec![];
+        zlib_decoder.read_to_end(&mut decompressed_data).unwrap();
+        decompressed_data
     }
 }
 
@@ -91,6 +117,41 @@ mod tests {
             chunk.validate_checksum(),
             "Checksum failed, checksum was {}",
             chunk.calculate_checksum()
+        );
+    }
+
+    #[test]
+    fn test_get_idat_data_single_idat_chunk() {
+        let chunk = Chunk::new(
+            4,
+            String::from("IDAT"),
+            Some(vec![0x01, 0x02, 0x03, 0x04]),
+            283159080,
+        );
+        let png = Png::new(None, vec![chunk], None);
+
+        assert_eq!(png.get_idat_data(), vec![0x01, 0x02, 0x03, 0x04]);
+    }
+
+    #[test]
+    fn test_get_idat_data_multiple_idat_chunks() {
+        let chunk1 = Chunk::new(
+            4,
+            String::from("IDAT"),
+            Some(vec![0x01, 0x02, 0x03, 0x04]),
+            283159080,
+        );
+        let chunk2 = Chunk::new(
+            4,
+            String::from("IDAT"),
+            Some(vec![0x05, 0x06, 0x07, 0x08]),
+            283159080,
+        );
+        let png = Png::new(None, vec![chunk1, chunk2], None);
+
+        assert_eq!(
+            png.get_idat_data(),
+            vec![0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]
         );
     }
 }

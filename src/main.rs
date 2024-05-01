@@ -4,7 +4,7 @@ use std::env;
 
 mod pretty_assert_printing;
 
-fn print_chunks(chunks: Vec<Chunk>) {
+fn print_chunks(chunks: &Vec<Chunk>) {
     for chunk in chunks {
         println!("Chunk type: {:?}", chunk.chunk_type);
         println!("Chunk length: {:?}", chunk.length);
@@ -24,7 +24,12 @@ fn main() -> Result<(), std::io::Error> {
     let parsed_png = parse_file(file);
 
     match parsed_png {
-        Ok(data) => print_chunks(data.chunks),
+        Ok(data) => {
+            println!("IHDR: {:?}", data.ihdr);
+            print_chunks(&data.chunks);
+            let idat_data = data.decompress_idat_data();
+            println!("IDAT data: {:?}", idat_data);
+        }
         Err(e) => println!("Error parsing file: {:?}", e),
     }
 
