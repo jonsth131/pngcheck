@@ -25,10 +25,10 @@ fn main() -> Result<(), std::io::Error> {
 
     match parsed_png {
         Ok(data) => {
-            println!("IHDR: {:?}", data.ihdr);
+            println!("IHDR: {:?}", data.ihdr());
             print_chunks(&data.chunks);
-            let idat_data = data.decompress_idat_data();
-            println!("IDAT data: {:?}", idat_data);
+            println!("Extra bytes: {:?}", data.extra_bytes);
+            println!("Pixel data: {:?}", data.get_pixel_data());
         }
         Err(e) => println!("Error parsing file: {:?}", e),
     }

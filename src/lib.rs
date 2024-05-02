@@ -15,7 +15,6 @@ pub fn parse_file(file: File) -> Result<png::Png, Box<dyn std::error::Error>> {
     }
 
     let mut chunks = vec![];
-    let mut ihdr = None;
 
     loop {
         let mut data = None;
@@ -26,26 +25,6 @@ pub fn parse_file(file: File) -> Result<png::Png, Box<dyn std::error::Error>> {
             data = Some(buf.read_bytes(length as usize)?);
         }
         let crc = buf.read_u32_be()?;
-
-        if chunk_type == "IHDR" {
-            let width = u32::from_be_bytes(data.as_ref().unwrap()[0..4].try_into()?);
-            let height = u32::from_be_bytes(data.as_ref().unwrap()[4..8].try_into()?);
-            let bit_depth = data.as_ref().unwrap()[8];
-            let color_type = data.as_ref().unwrap()[9];
-            let compression_method = data.as_ref().unwrap()[10];
-            let filter_method = data.as_ref().unwrap()[11];
-            let interlace_method = data.as_ref().unwrap()[12];
-
-            ihdr = Some(png::IHDR {
-                width,
-                height,
-                bit_depth,
-                color_type,
-                compression_method,
-                filter_method,
-                interlace_method,
-            });
-        }
 
         chunks.push(png::Chunk::new(length, String::from(chunk_type), data, crc));
 
@@ -58,8 +37,8 @@ pub fn parse_file(file: File) -> Result<png::Png, Box<dyn std::error::Error>> {
     buf.read_to_end(&mut extra_bytes)?;
 
     if !extra_bytes.is_empty() {
-        return Ok(png::Png::new(ihdr, chunks, Some(extra_bytes)));
+        return Ok(png::Png::new(chunks, Some(extra_bytes)));
     }
 
-    Ok(png::Png::new(ihdr, chunks, None))
+    Ok(png::Png::new(chunks, None))
 }
