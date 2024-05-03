@@ -1,5 +1,10 @@
-use flate2::read::ZlibDecoder;
-use std::io::Read;
+mod chunk;
+mod compression;
+mod filter;
+mod scanline;
+
+pub use crate::png::chunk::Chunk;
+use crate::png::scanline::Scanline;
 
 pub const HEADER: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
 
@@ -10,42 +15,11 @@ pub const ANCILLARY_CHUNKS: [&str; 18] = [
     "sRGB", "sTER", "tEXt", "tIME", "tRNS", "zTXt",
 ];
 
-pub struct Chunk {
-    pub length: u32,
-    pub chunk_type: String,
-    pub data: Option<Vec<u8>>,
-    pub crc: u32,
-}
-
-impl Chunk {
-    pub fn new(length: u32, chunk_type: String, data: Option<Vec<u8>>, crc: u32) -> Self {
-        Self {
-            length,
-            chunk_type,
-            data,
-            crc,
-        }
-    }
-
-    pub fn calculate_checksum(&self) -> u32 {
-        let crc32 = crc::Crc::<u32>::new(&crc::CRC_32_ISO_HDLC);
-
-        match &self.data {
-            Some(data) => crc32.checksum(&[self.chunk_type.as_bytes(), &data[..]].concat()),
-            None => crc32.checksum(self.chunk_type.as_bytes()),
-        }
-    }
-
-    pub fn validate_checksum(&self) -> bool {
-        self.calculate_checksum() == self.crc
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Pixel {
     Grayscale(u8),
     Truecolor(u8, u8, u8),
-    Indexed(u8),
+    Indexed(u8, u8, u8),
     GrayscaleAlpha(u8, u8),
     TruecolorAlpha(u8, u8, u8, u8),
 }
@@ -88,48 +62,65 @@ impl Png {
     }
 
     pub fn ihdr(&self) -> Option<IHDR> {
-        for chunk in &self.chunks {
-            if chunk.chunk_type == "IHDR" {
-                let data = chunk.data.as_ref().unwrap();
-                let color_type = match data[9] {
-                    0 => ColorType::Grayscale,
-                    2 => ColorType::Truecolor,
-                    3 => ColorType::Indexed,
-                    4 => ColorType::GrayscaleAlpha,
-                    6 => ColorType::TruecolorAlpha,
-                    _ => return None,
-                };
-                return Some(IHDR {
-                    width: u32::from_be_bytes([data[0], data[1], data[2], data[3]]),
-                    height: u32::from_be_bytes([data[4], data[5], data[6], data[7]]),
-                    bit_depth: data[8],
-                    color_type,
-                    compression_method: data[10],
-                    filter_method: data[11],
-                    interlace_method: data[12],
-                });
-            }
+        let chunk = self.chunks.iter().find(|c| c.chunk_type == "IHDR")?;
+
+        if let Some(data) = &chunk.data {
+            let color_type = match data[9] {
+                0 => ColorType::Grayscale,
+                2 => ColorType::Truecolor,
+                3 => ColorType::Indexed,
+                4 => ColorType::GrayscaleAlpha,
+                6 => ColorType::TruecolorAlpha,
+                _ => return None,
+            };
+
+            return Some(IHDR {
+                width: u32::from_be_bytes([data[0], data[1], data[2], data[3]]),
+                height: u32::from_be_bytes([data[4], data[5], data[6], data[7]]),
+                bit_depth: data[8],
+                color_type,
+                compression_method: data[10],
+                filter_method: data[11],
+                interlace_method: data[12],
+            });
         }
 
         None
     }
 
     pub fn plte(&self) -> Option<PLTE> {
-        for chunk in &self.chunks {
-            if chunk.chunk_type == "PLTE" {
-                let data = chunk.data.as_ref().unwrap();
-                let mut entries = vec![];
-                for i in 0..data.len() / 3 {
-                    entries.push((data[i * 3], data[i * 3 + 1], data[i * 3 + 2]));
-                }
-                return Some(PLTE { entries });
+        let chunk = self.chunks.iter().find(|c| c.chunk_type == "PLTE")?;
+
+        if let Some(data) = &chunk.data {
+            let mut entries = vec![];
+            for i in 0..data.len() / 3 {
+                entries.push((data[i * 3], data[i * 3 + 1], data[i * 3 + 2]));
             }
+            return Some(PLTE { entries });
         }
 
         None
     }
 
-    pub fn get_pixel_data(&self) -> Result<Vec<Pixel>, std::io::Error> {
+    fn get_idat_data(&self) -> Vec<u8> {
+        self.chunks
+            .iter()
+            .filter(|c| c.chunk_type == "IDAT")
+            .fold(vec![], |mut acc, c| {
+                match &c.data {
+                    Some(data) => acc.extend(data),
+                    None => (),
+                }
+                acc
+            })
+    }
+
+    fn decompress_idat_data(&self) -> Result<Vec<u8>, std::io::Error> {
+        let idat_data = self.get_idat_data();
+        compression::decompress(&idat_data)
+    }
+
+    pub fn get_scanlines(&self) -> Result<Vec<Scanline>, std::io::Error> {
         let ihdr = match self.ihdr() {
             Some(ihdr) => ihdr,
             None => {
@@ -139,74 +130,25 @@ impl Png {
                 ))
             }
         };
+
         let idat_data = self.decompress_idat_data()?;
-        let mut pixel_data = vec![];
-
-        match ihdr.color_type {
-            ColorType::Grayscale => {
-                for pixel in idat_data {
-                    pixel_data.push(Pixel::Grayscale(pixel));
-                }
-            }
-            ColorType::Truecolor => {
-                for i in 0..idat_data.len() / 3 {
-                    pixel_data.push(Pixel::Truecolor(
-                        idat_data[i * 3],
-                        idat_data[i * 3 + 1],
-                        idat_data[i * 3 + 2],
-                    ));
-                }
-            }
-            ColorType::Indexed => {
-                for pixel in idat_data {
-                    pixel_data.push(Pixel::Indexed(pixel));
-                }
-            }
-            ColorType::GrayscaleAlpha => {
-                for i in 0..idat_data.len() / 2 {
-                    pixel_data.push(Pixel::GrayscaleAlpha(
-                        idat_data[i * 2],
-                        idat_data[i * 2 + 1],
-                    ));
-                }
-            }
-            ColorType::TruecolorAlpha => {
-                for i in 0..idat_data.len() / 4 {
-                    pixel_data.push(Pixel::TruecolorAlpha(
-                        idat_data[i * 4],
-                        idat_data[i * 4 + 1],
-                        idat_data[i * 4 + 2],
-                        idat_data[i * 4 + 3],
-                    ));
-                }
-            }
+        let plte = PLTE { // TODO: get plte from the chunks
+            entries: vec![(0, 0, 0), (255, 255, 255)],
         };
+        let scanlines = scanline::parse_scanlines(&ihdr, Some(&plte), &idat_data);
 
-        Ok(pixel_data)
+        Ok(scanlines)
     }
+}
 
-    fn get_idat_data(&self) -> Vec<u8> {
-        let mut idat_data = vec![];
-        for chunk in &self.chunks {
-            if chunk.chunk_type == "IDAT" {
-                match &chunk.data {
-                    Some(data) => idat_data.extend(data),
-                    None => (),
-                }
-            }
-        }
-        idat_data
-    }
-
-    fn decompress_idat_data(&self) -> Result<Vec<u8>, std::io::Error> {
-        let idat_data = self.get_idat_data();
-        let mut zlib_decoder = ZlibDecoder::new(&idat_data[..]);
-        let mut decompressed_data = vec![];
-        let result = zlib_decoder.read_to_end(&mut decompressed_data);
-
-        match result {
-            Ok(_) => Ok(decompressed_data),
-            Err(e) => Err(e),
+impl IHDR {
+    pub fn bytes_per_pixel(&self) -> usize {
+        match self.color_type {
+            ColorType::Grayscale => 1,
+            ColorType::Truecolor => 3,
+            ColorType::Indexed => 1,
+            ColorType::GrayscaleAlpha => 2,
+            ColorType::TruecolorAlpha => 4,
         }
     }
 }
@@ -214,49 +156,6 @@ impl Png {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_validate_checksum() {
-        let chunk = Chunk::new(
-            4,
-            String::from("abcd"),
-            Some(vec![0x01, 0x02, 0x03, 0x04]),
-            283159080,
-        );
-
-        assert!(
-            chunk.validate_checksum(),
-            "Checksum failed, checksum was {}",
-            chunk.calculate_checksum()
-        );
-    }
-
-    #[test]
-    fn test_validate_checksum_empty_data() {
-        let chunk = Chunk::new(0, String::from("IEND"), None, 2923585666);
-
-        assert!(
-            chunk.validate_checksum(),
-            "Checksum failed, checksum was {}",
-            chunk.calculate_checksum()
-        );
-    }
-
-    #[test]
-    fn test_validate_invalid_checksum() {
-        let chunk = Chunk::new(
-            4,
-            String::from("abcd"),
-            Some(vec![0x01, 0x02, 0x03, 0x04]),
-            11111111,
-        );
-
-        assert!(
-            !chunk.validate_checksum(),
-            "Checksum failed, checksum was {}",
-            chunk.calculate_checksum()
-        );
-    }
 
     #[test]
     fn test_get_idat_data_single_idat_chunk() {

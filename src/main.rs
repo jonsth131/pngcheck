@@ -28,7 +28,7 @@ fn main() -> Result<(), std::io::Error> {
             println!("IHDR: {:?}", data.ihdr());
             print_chunks(&data.chunks);
             println!("Extra bytes: {:?}", data.extra_bytes);
-            println!("Pixel data: {:?}", data.get_pixel_data());
+            println!("Pixel data: {:?}", data.get_scanlines(),);
         }
         Err(e) => println!("Error parsing file: {:?}", e),
     }
