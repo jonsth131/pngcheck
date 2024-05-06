@@ -10,11 +10,11 @@ pub enum Filter {
 pub fn filter_scanline(
     filter: Filter,
     previous: &[u8],
-    current: &[u8],
+    current: &mut [u8],
     bytes_per_pixel: usize,
-) -> Vec<u8> {
+) {
     match filter {
-        Filter::None => current.to_vec(),
+        Filter::None => (),
         Filter::Sub => sub_filter(current, bytes_per_pixel),
         Filter::Up => up_filter(previous, current),
         Filter::Average => average_filter(previous, current, bytes_per_pixel),
@@ -22,73 +22,58 @@ pub fn filter_scanline(
     }
 }
 
-fn sub_filter(current: &[u8], bytes_per_pixel: usize) -> Vec<u8> {
-    let mut result = vec![];
-    for i in 0..current.len() {
-        let a = if i < bytes_per_pixel {
-            0
-        } else {
-            result[i - bytes_per_pixel]
-        };
-        result.push(current[i].wrapping_add(a));
+fn sub_filter(current: &mut [u8], bytes_per_pixel: usize) {
+    let mut a = vec![0; bytes_per_pixel];
+    for x in current.chunks_exact_mut(bytes_per_pixel) {
+        for (x, a) in x.iter_mut().zip(a.iter()) {
+            *x = x.wrapping_add(*a);
+        }
+        a = x.to_vec();
     }
-    result
 }
 
-fn up_filter(previous: &[u8], current: &[u8]) -> Vec<u8> {
-    current
-        .iter()
-        .enumerate()
-        .map(|(i, &x)| x.wrapping_add(previous[i]))
-        .collect()
+fn up_filter(previous: &[u8], current: &mut [u8]) {
+    current.iter_mut().zip(previous.iter()).for_each(|(x, a)| {
+        *x = x.wrapping_add(*a);
+    });
 }
 
-fn average_filter(previous: &[u8], current: &[u8], bytes_per_pixel: usize) -> Vec<u8> {
-    let mut result = vec![];
-    for i in 0..current.len() {
-        let a = if i < bytes_per_pixel {
-            0
-        } else {
-            result[i - bytes_per_pixel]
-        };
-        let b = previous.get(i).copied().unwrap_or(0);
-        result.push(current[i].wrapping_add(((a as u16 + b as u16) / 2) as u8));
+fn average_filter(previous: &[u8], current: &mut [u8], bytes_per_pixel: usize) {
+    let mut a = vec![0; bytes_per_pixel];
+    for (x, b) in current
+        .chunks_exact_mut(bytes_per_pixel)
+        .zip(previous.chunks_exact(bytes_per_pixel))
+    {
+        for ((x, a), b) in x.iter_mut().zip(a.iter()).zip(b.iter()) {
+            *x = x.wrapping_add(((*a as i16 + *b as i16) / 2) as u8);
+        }
+        a = x.to_vec();
     }
-    result
 }
 
-fn paeth_filter(previous: &[u8], current: &[u8], bytes_per_pixel: usize) -> Vec<u8> {
-    let mut result = vec![];
-    for i in 0..current.len() {
-        let a = if i < bytes_per_pixel {
-            0
-        } else {
-            current[i - bytes_per_pixel]
-        };
-        let b = previous.get(i).copied().unwrap_or(0);
-        let c_idx = if (i as i16 - bytes_per_pixel as i16) < 0 {
-            0
-        } else {
-            i - bytes_per_pixel
-        };
+fn paeth_filter(previous: &[u8], current: &mut [u8], bytes_per_pixel: usize) {
+    let mut a = vec![0; bytes_per_pixel];
+    let mut c = vec![0; bytes_per_pixel];
 
-        let c = previous.get(c_idx).copied().unwrap_or(0);
-        result.push(current[i].wrapping_add(paeth_predictor(a, b, c)));
-    }
-    result
-}
-
-fn paeth_predictor(a: u8, b: u8, c: u8) -> u8 {
-    let p = a as i32 + b as i32 - c as i32;
-    let p_a = (p - a as i32).abs();
-    let p_b = (p - b as i32).abs();
-    let p_c = (p - c as i32).abs();
-    if p_a <= p_b && p_a <= p_c {
-        a
-    } else if p_b <= p_c {
-        b
-    } else {
-        c
+    for (x, b) in current
+        .chunks_exact_mut(bytes_per_pixel)
+        .zip(previous.chunks_exact(bytes_per_pixel))
+    {
+        for (((x, a), b), c) in x.iter_mut().zip(a.iter()).zip(b.iter()).zip(c.iter()) {
+            let p = *a as i16 + *b as i16 - *c as i16;
+            let pa = (p - *a as i16).abs();
+            let pb = (p - *b as i16).abs();
+            let pc = (p - *c as i16).abs();
+            *x = x.wrapping_add(if pa <= pb && pa <= pc {
+                *a
+            } else if pb <= pc {
+                *b
+            } else {
+                *c
+            });
+        }
+        a = x.to_vec();
+        c = b.to_vec();
     }
 }
 
@@ -98,47 +83,44 @@ mod tests {
 
     #[test]
     fn test_sub_filter() {
-        let current = vec![0x02, 0x03, 0x04];
-        let bytes_per_pixel = 1;
-        let expected = vec![0x02, 0x05, 0x09];
+        let mut current = vec![0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09];
+        let expected = vec![2, 3, 4, 5, 8, 10, 12, 14];
 
-        let result = sub_filter(&current, bytes_per_pixel);
+        sub_filter(&mut current, 4);
 
-        assert_eq!(result, expected);
+        assert_eq!(current, expected);
     }
 
     #[test]
     fn test_up_filter() {
         let previous = vec![0x02, 0x03, 0x04];
-        let current = vec![0x03, 0x04, 0x05];
+        let mut current = vec![0x03, 0x04, 0x05];
         let expected = vec![0x05, 0x07, 0x09];
 
-        let result = up_filter(&previous, &current);
+        up_filter(&previous, &mut current);
 
-        assert_eq!(result, expected);
+        assert_eq!(current, expected);
     }
 
     #[test]
     fn test_average_filter() {
-        let previous = vec![0x02, 0x03, 0x04];
-        let current = vec![0x03, 0x04, 0x05];
-        let bytes_per_pixel = 1;
-        let expected = vec![0x04, 0x07, 0x0a];
+        let previous = vec![0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09];
+        let mut current = vec![0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A];
+        let expected = vec![4, 5, 7, 8, 12, 14, 16, 18];
 
-        let result = average_filter(&previous, &current, bytes_per_pixel);
+        average_filter(&previous, &mut current, 4);
 
-        assert_eq!(result, expected);
+        assert_eq!(current, expected);
     }
 
     #[test]
     fn test_paeth_filter() {
-        let previous = vec![0x02, 0x03, 0x04];
-        let current = vec![0x03, 0x04, 0x05];
-        let bytes_per_pixel = 1;
-        let expected = vec![0x03, 0x07, 0x09];
+        let previous = vec![0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09];
+        let mut current = vec![0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A];
+        let expected = vec![5, 7, 9, 11, 13, 15, 18, 21];
 
-        let result = paeth_filter(&previous, &current, bytes_per_pixel);
+        paeth_filter(&previous, &mut current, 4);
 
-        assert_eq!(result, expected);
+        assert_eq!(current, expected);
     }
 }

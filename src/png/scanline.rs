@@ -31,14 +31,14 @@ pub fn parse_scanlines(ihdr: &IHDR, plte: Option<&PLTE>, data: &[u8]) -> Vec<Sca
             None => vec![0; bytes_per_scanline],
         };
 
-        let filtered_data = filter_scanline(
+        filter_scanline(
             filter_type,
             &previous_scanline,
-            &scanline_data,
+            &mut scanline_data,
             bytes_per_pixel,
         );
 
-        scanlines.push(filtered_data);
+        scanlines.push(scanline_data);
     }
 
     scanlines
