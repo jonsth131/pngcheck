@@ -1,5 +1,6 @@
 use pngcheck::parse_file;
 use pngcheck::png::Chunk;
+use pngcheck::view::view_image;
 use std::env;
 
 mod pretty_assert_printing;
@@ -28,7 +29,13 @@ fn main() -> Result<(), std::io::Error> {
             println!("IHDR: {:?}", data.ihdr());
             print_chunks(&data.chunks);
             println!("Extra bytes: {:?}", data.extra_bytes);
-            println!("Pixel data: {:?}", data.get_scanlines(),);
+
+            match data.ihdr() {
+                Some(ihdr) => {
+                    view_image(&data.get_scanlines()?, &ihdr);
+                }
+                None => println!("IHDR chunk not found"),
+            }
         }
         Err(e) => println!("Error parsing file: {:?}", e),
     }

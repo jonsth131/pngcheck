@@ -5,6 +5,7 @@ use std::str;
 
 mod easy_br;
 pub mod png;
+pub mod view;
 
 pub fn parse_file(file: File) -> Result<png::Png, Box<dyn std::error::Error>> {
     let mut buf = BufReader::new(file);

@@ -1,7 +1,7 @@
 mod chunk;
 mod compression;
 mod filter;
-mod scanline;
+pub mod scanline;
 
 pub use crate::png::chunk::Chunk;
 use crate::png::scanline::Scanline;
@@ -31,6 +31,15 @@ pub enum ColorType {
     Indexed,
     GrayscaleAlpha,
     TruecolorAlpha,
+}
+
+impl ColorType {
+    pub fn has_alpha(&self) -> bool {
+        match self {
+            ColorType::GrayscaleAlpha | ColorType::TruecolorAlpha => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -132,7 +141,8 @@ impl Png {
         };
 
         let idat_data = self.decompress_idat_data()?;
-        let plte = PLTE { // TODO: get plte from the chunks
+        let plte = PLTE {
+            // TODO: get plte from the chunks
             entries: vec![(0, 0, 0), (255, 255, 255)],
         };
         let scanlines = scanline::parse_scanlines(&ihdr, Some(&plte), &idat_data);
