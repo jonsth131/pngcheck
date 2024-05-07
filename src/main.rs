@@ -47,6 +47,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         Args::Check { file } => {
             let data = read_file(&file)?;
             println!("IHDR: {:?}", data.ihdr());
+            println!("PLTE: {:?}", data.plte());
+            println!("tRNS: {:?}", data.trns());
+            println!("pHYs: {:?}", data.phys());
+            println!("sRGB: {:?}", data.srgb());
+            println!("gAMA: {:?}", data.gama());
             print_chunks(&data.chunks);
             println!("Extra bytes: {:?}", data.extra_bytes);
         }

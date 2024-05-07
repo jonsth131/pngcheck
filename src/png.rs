@@ -33,6 +33,7 @@ pub enum ColorType {
     TruecolorAlpha,
 }
 
+#[derive(Debug)]
 pub enum Transparency {
     Grey(u16),
     Rgb(u16, u16, u16),
@@ -56,10 +57,34 @@ pub struct IHDR {
     pub interlace_method: u8,
 }
 
+#[derive(Debug)]
 pub struct PLTE {
     pub entries: Vec<(u8, u8, u8)>,
     pub transparency: Option<Transparency>,
 }
+
+#[derive(Debug)]
+pub enum UnitSpecifier {
+    Unknown,
+    Meter,
+}
+
+#[derive(Debug)]
+pub struct Phys {
+    pub pixels_per_unit_x: u32,
+    pub pixels_per_unit_y: u32,
+    pub unit_specifier: UnitSpecifier,
+}
+
+#[derive(Debug)]
+pub enum SrgbRenderingIntent {
+    Perceptual,
+    RelativeColorimetric,
+    Saturation,
+    AbsoluteColorimetric,
+}
+
+type gama = u32;
 
 pub struct Png {
     pub chunks: Vec<Chunk>,
@@ -136,6 +161,52 @@ impl Png {
                 ColorType::Indexed => return Some(Transparency::Alpha(data.clone())),
                 _ => (),
             }
+        }
+
+        None
+    }
+
+    pub fn phys(&self) -> Option<Phys> {
+        let chunk = self.chunks.iter().find(|c| c.chunk_type == "pHYs")?;
+
+        if let Some(data) = &chunk.data {
+            let unit_specifier = match data[8] {
+                0 => UnitSpecifier::Unknown,
+                1 => UnitSpecifier::Meter,
+                _ => return None,
+            };
+
+            return Some(Phys {
+                pixels_per_unit_x: u32::from_be_bytes([data[0], data[1], data[2], data[3]]),
+                pixels_per_unit_y: u32::from_be_bytes([data[4], data[5], data[6], data[7]]),
+                unit_specifier,
+            });
+        }
+
+        None
+    }
+
+    pub fn srgb(&self) -> Option<SrgbRenderingIntent> {
+        let chunk = self.chunks.iter().find(|c| c.chunk_type == "sRGB")?;
+
+        if let Some(data) = &chunk.data {
+            match data[0] {
+                0 => return Some(SrgbRenderingIntent::Perceptual),
+                1 => return Some(SrgbRenderingIntent::RelativeColorimetric),
+                2 => return Some(SrgbRenderingIntent::Saturation),
+                3 => return Some(SrgbRenderingIntent::AbsoluteColorimetric),
+                _ => (),
+            }
+        }
+
+        None
+    }
+
+    pub fn gama(&self) -> Option<gama> {
+        let chunk = self.chunks.iter().find(|c| c.chunk_type == "gAMA")?;
+
+        if let Some(data) = &chunk.data {
+            return Some(u32::from_be_bytes([data[0], data[1], data[2], data[3]]));
         }
 
         None
