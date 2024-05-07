@@ -33,6 +33,12 @@ pub enum ColorType {
     TruecolorAlpha,
 }
 
+pub enum Transparency {
+    Grey(u16),
+    Rgb(u16, u16, u16),
+    Alpha(Vec<u8>),
+}
+
 impl ColorType {
     pub fn has_alpha(&self) -> bool {
         match self {
@@ -55,6 +61,7 @@ pub struct IHDR {
 
 pub struct PLTE {
     pub entries: Vec<(u8, u8, u8)>,
+    pub transparency: Option<Transparency>,
 }
 
 pub struct Png {
@@ -105,7 +112,31 @@ impl Png {
             for i in 0..data.len() / 3 {
                 entries.push((data[i * 3], data[i * 3 + 1], data[i * 3 + 2]));
             }
-            return Some(PLTE { entries });
+            return Some(PLTE { entries, transparency: self.trns() });
+        }
+
+        None
+    }
+
+    pub fn trns(&self) -> Option<Transparency> {
+        let chunk = self.chunks.iter().find(|c| c.chunk_type == "tRNS")?;
+        println!("{:?}", chunk);
+
+        if let Some(data) = &chunk.data {
+            match self.ihdr()?.color_type {
+                ColorType::Grayscale => {
+                    return Some(Transparency::Grey(u16::from_be_bytes([data[0], data[1]])))
+                }
+                ColorType::Truecolor => {
+                    return Some(Transparency::Rgb(
+                        u16::from_be_bytes([data[0], data[1]]),
+                        u16::from_be_bytes([data[2], data[3]]),
+                        u16::from_be_bytes([data[4], data[5]]),
+                    ))
+                }
+                ColorType::Indexed => return Some(Transparency::Alpha(data.clone())),
+                _ => (),
+            }
         }
 
         None
@@ -141,11 +172,12 @@ impl Png {
         };
 
         let idat_data = self.decompress_idat_data()?;
-        let plte = PLTE {
-            // TODO: get plte from the chunks
-            entries: vec![(0, 0, 0), (255, 255, 255)],
+        let plte = match self.plte() {
+            Some(plte) => Some(plte),
+            None => None,
         };
-        let scanlines = scanline::parse_scanlines(&ihdr, Some(&plte), &idat_data);
+
+        let scanlines = scanline::parse_scanlines(&ihdr, plte.as_ref(), &idat_data);
 
         Ok(scanlines)
     }

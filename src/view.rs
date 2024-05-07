@@ -17,7 +17,7 @@ pub fn view_image(scanlines: &[Scanline], ihdr: &IHDR) {
 
 fn create_dynamic_image(scanlines: &[Scanline], ihdr: &IHDR) -> DynamicImage {
     match ihdr.color_type {
-        ColorType::TruecolorAlpha => {
+        ColorType::TruecolorAlpha | ColorType::Indexed  => {
             let mut img = RgbaImage::new(ihdr.width, ihdr.height);
             for (i, scanline) in scanlines.iter().enumerate() {
                 for (j, pixel) in scanline.pixels.iter().enumerate() {
