@@ -22,15 +22,27 @@ enum Args {
     },
 }
 
+fn print_banner() {
+    println!();
+    println!("██████╗ ███╗   ██╗ ██████╗      ██████╗██╗  ██╗███████╗ ██████╗██╗  ██╗");
+    println!("██╔══██╗████╗  ██║██╔════╝     ██╔════╝██║  ██║██╔════╝██╔════╝██║ ██╔╝");
+    println!("██████╔╝██╔██╗ ██║██║  ███╗    ██║     ███████║█████╗  ██║     █████╔╝ ");
+    println!("██╔═══╝ ██║╚██╗██║██║   ██║    ██║     ██╔══██║██╔══╝  ██║     ██╔═██╗ ");
+    println!("██║     ██║ ╚████║╚██████╔╝    ╚██████╗██║  ██║███████╗╚██████╗██║  ██╗");
+    println!("╚═╝     ╚═╝  ╚═══╝ ╚═════╝      ╚═════╝╚═╝  ╚═╝╚══════╝ ╚═════╝╚═╝  ╚═╝");
+    println!();
+}
+
 fn print_chunks(chunks: &Vec<Chunk>) {
     for chunk in chunks {
-        println!("Chunk type: {:?}", chunk.chunk_type);
+        println!("=============== {} ===============", chunk.chunk_type);
         println!("Chunk length: {:?}", chunk.length);
         println!(
             "CRC: {:?}, Valid: {:?}",
             chunk.crc,
             chunk.validate_checksum()
         );
+        println!("Parsed chunk: {:?}", chunk.parse());
     }
 }
 
@@ -45,14 +57,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     match args {
         Args::Check { file } => {
+            print_banner();
             let data = read_file(&file)?;
-            println!("IHDR: {:?}", data.ihdr());
-            println!("PLTE: {:?}", data.plte());
-            println!("tRNS: {:?}", data.trns());
-            println!("pHYs: {:?}", data.phys());
-            println!("sRGB: {:?}", data.srgb());
-            println!("gAMA: {:?}", data.gama());
             print_chunks(&data.chunks);
+            println!("====================================");
             println!("Extra bytes: {:?}", data.extra_bytes);
         }
         Args::View { file } => {

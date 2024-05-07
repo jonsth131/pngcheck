@@ -108,6 +108,7 @@ fn parse_pixels(ihdr: &IHDR, plte: Option<&PLTE>, scanline: &[u8]) -> Vec<Pixel>
 mod tests {
     use super::*;
     use crate::png::ColorType;
+    use crate::png::chunk::{CompressionMethod, FilterMethod, InterlaceMethod};
 
     #[test]
     fn test_parse_pixels() {
@@ -116,9 +117,9 @@ mod tests {
             height: 1,
             bit_depth: 8,
             color_type: ColorType::Grayscale,
-            compression_method: 0,
-            filter_method: 0,
-            interlace_method: 0,
+            compression_method: CompressionMethod::Deflate,
+            filter_method: FilterMethod::Adaptive,
+            interlace_method: InterlaceMethod::None,
         };
 
         let plte = None;
