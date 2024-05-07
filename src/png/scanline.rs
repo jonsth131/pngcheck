@@ -21,10 +21,13 @@ pub fn parse_scanlines(ihdr: &IHDR, plte: Option<&PLTE>, data: &[u8]) -> Vec<Sca
             4 => Filter::Paeth,
             _ => panic!("Invalid filter type"),
         };
-        let mut scanline_data = vec![];
-        for j in (i + 1)..(i + bytes_per_scanline) {
-            scanline_data.push(data[j]);
-        }
+
+        let mut scanline_data = data
+            .iter()
+            .take(i + bytes_per_scanline)
+            .skip(i + 1)
+            .cloned()
+            .collect::<Vec<u8>>();
 
         let previous_scanline: Vec<u8> = match scanlines.last() {
             Some(scanline) => scanline.clone(),
@@ -50,7 +53,6 @@ pub fn parse_scanlines(ihdr: &IHDR, plte: Option<&PLTE>, data: &[u8]) -> Vec<Sca
 }
 
 fn parse_pixels(ihdr: &IHDR, plte: Option<&PLTE>, scanline: &[u8]) -> Vec<Pixel> {
-    let mut pixels = vec![];
     match ihdr.color_type {
         super::ColorType::Indexed => {
             let plte = plte.unwrap();
@@ -62,50 +64,44 @@ fn parse_pixels(ihdr: &IHDR, plte: Option<&PLTE>, scanline: &[u8]) -> Vec<Pixel>
                 None => panic!("Transparency chunk not found"),
             };
 
-            for i in (0..scanline.len()).step_by(1) {
-                let index = scanline[i];
-                let (r, g, b) = plte.entries[index as usize];
-                let a = if index >= alpha.len() as u8 {
-                    255
-                } else {
-                    alpha[index as usize]
-                };
-                pixels.push(Pixel::TruecolorAlpha(r, g, b, a));
-            }
+            return scanline
+                .iter()
+                .map(|&index| {
+                    let (r, g, b) = plte.entries[index as usize];
+                    let a = if index >= alpha.len() as u8 {
+                        255
+                    } else {
+                        alpha[index as usize]
+                    };
+                    Pixel::TruecolorAlpha(r, g, b, a)
+                })
+                .collect();
         }
         super::ColorType::Grayscale => {
-            for i in (0..scanline.len()).step_by(1) {
-                let gray = scanline[i];
-                pixels.push(Pixel::Grayscale(gray));
-            }
-        }
-        super::ColorType::Truecolor => {
-            for i in (0..scanline.len()).step_by(3) {
-                let r = scanline[i];
-                let g = scanline[i + 1];
-                let b = scanline[i + 2];
-                pixels.push(Pixel::Truecolor(r, g, b));
-            }
+            return scanline
+                .iter()
+                .map(|&gray| Pixel::Grayscale(gray))
+                .collect();
         }
         super::ColorType::GrayscaleAlpha => {
-            for i in (0..scanline.len()).step_by(2) {
-                let gray = scanline[i];
-                let alpha = scanline[i + 1];
-                pixels.push(Pixel::GrayscaleAlpha(gray, alpha));
-            }
+            return scanline
+                .chunks(2)
+                .map(|chunk| Pixel::GrayscaleAlpha(chunk[0], chunk[1]))
+                .collect();
+        }
+        super::ColorType::Truecolor => {
+            return scanline
+                .chunks(3)
+                .map(|chunk| Pixel::Truecolor(chunk[0], chunk[1], chunk[2]))
+                .collect();
         }
         super::ColorType::TruecolorAlpha => {
-            for i in (0..scanline.len()).step_by(4) {
-                let r = scanline[i];
-                let g = scanline[i + 1];
-                let b = scanline[i + 2];
-                let alpha = scanline[i + 3];
-                pixels.push(Pixel::TruecolorAlpha(r, g, b, alpha));
-            }
+            return scanline
+                .chunks(4)
+                .map(|chunk| Pixel::TruecolorAlpha(chunk[0], chunk[1], chunk[2], chunk[3]))
+                .collect();
         }
     }
-
-    pixels
 }
 
 #[cfg(test)]

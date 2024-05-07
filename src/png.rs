@@ -41,10 +41,7 @@ pub enum Transparency {
 
 impl ColorType {
     pub fn has_alpha(&self) -> bool {
-        match self {
-            ColorType::GrayscaleAlpha | ColorType::TruecolorAlpha => true,
-            _ => false,
-        }
+        matches!(self, ColorType::GrayscaleAlpha | ColorType::TruecolorAlpha)
     }
 }
 
@@ -112,7 +109,10 @@ impl Png {
             for i in 0..data.len() / 3 {
                 entries.push((data[i * 3], data[i * 3 + 1], data[i * 3 + 2]));
             }
-            return Some(PLTE { entries, transparency: self.trns() });
+            return Some(PLTE {
+                entries,
+                transparency: self.trns(),
+            });
         }
 
         None
@@ -171,12 +171,8 @@ impl Png {
         };
 
         let idat_data = self.decompress_idat_data()?;
-        let plte = match self.plte() {
-            Some(plte) => Some(plte),
-            None => None,
-        };
 
-        let scanlines = scanline::parse_scanlines(&ihdr, plte.as_ref(), &idat_data);
+        let scanlines = scanline::parse_scanlines(&ihdr, self.plte().as_ref(), &idat_data);
 
         Ok(scanlines)
     }
