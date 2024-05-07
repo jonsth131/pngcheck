@@ -120,7 +120,6 @@ impl Png {
 
     pub fn trns(&self) -> Option<Transparency> {
         let chunk = self.chunks.iter().find(|c| c.chunk_type == "tRNS")?;
-        println!("{:?}", chunk);
 
         if let Some(data) = &chunk.data {
             match self.ihdr()?.color_type {
