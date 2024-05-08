@@ -1,3 +1,5 @@
+use crate::png::compression::decompress;
+
 #[derive(Debug)]
 pub enum ParsedChunk {
     IHDR(IHDR),
@@ -8,6 +10,11 @@ pub enum ParsedChunk {
     Phys(Phys),
     Srgb(SrgbRenderingIntent),
     Gama(Gama),
+    Bkgd(Bkgd),
+    Sbit(Sbit),
+    Itxt(Itxt),
+    Text(Text),
+    Ztxt(Ztxt),
     Unknown(String, Option<Vec<u8>>),
 }
 
@@ -149,6 +156,44 @@ impl SrgbRenderingIntent {
 
 pub type Gama = u32;
 
+#[derive(Debug)]
+pub enum Bkgd {
+    Grayscale(u16),
+    Rgb(u16, u16, u16),
+    Indexed(u8),
+}
+
+#[derive(Debug)]
+pub enum Sbit {
+    Grayscale(u8),
+    Truecolor(u8, u8, u8),
+    GrayscaleAlpha(u8, u8),
+    TruecolorAlpha(u8, u8, u8, u8),
+}
+
+#[derive(Debug)]
+pub struct Itxt {
+    pub keyword: String,
+    pub compression_flag: u8,
+    pub compression_method: u8,
+    pub language_tag: String,
+    pub translated_keyword: String,
+    pub text: String,
+}
+
+#[derive(Debug)]
+pub struct Text {
+    pub keyword: String,
+    pub text: String,
+}
+
+#[derive(Debug)]
+pub struct Ztxt {
+    pub keyword: String,
+    pub compression_method: u8,
+    pub text: String,
+}
+
 pub struct Chunk {
     pub length: u32,
     pub chunk_type: String,
@@ -189,6 +234,11 @@ impl Chunk {
             "pHYs" => ParsedChunk::Phys(self.parse_phys()),
             "sRGB" => ParsedChunk::Srgb(self.parse_srgb()),
             "gAMA" => ParsedChunk::Gama(self.parse_gama()),
+            "bKGD" => ParsedChunk::Bkgd(self.parse_bkgd()),
+            "sBIT" => ParsedChunk::Sbit(self.parse_sbit()),
+            "iTXt" => ParsedChunk::Itxt(self.parse_itxt()),
+            "tEXt" => ParsedChunk::Text(self.parse_text()),
+            "zTXt" => ParsedChunk::Ztxt(self.parse_ztxt()),
             _ => ParsedChunk::Unknown(self.chunk_type.clone(), self.data.clone()),
         }
     }
@@ -231,6 +281,124 @@ impl Chunk {
     fn parse_gama(&self) -> Gama {
         let data = self.data.as_ref().unwrap();
         u32::from_be_bytes([data[0], data[1], data[2], data[3]])
+    }
+
+    fn parse_bkgd(&self) -> Bkgd {
+        let data = self.data.as_ref().unwrap();
+
+        match data.len() {
+            1 => Bkgd::Indexed(data[0]),
+            2 => Bkgd::Grayscale(u16::from_be_bytes([data[0], data[1]])),
+            6 => Bkgd::Rgb(
+                u16::from_be_bytes([data[0], data[1]]),
+                u16::from_be_bytes([data[2], data[3]]),
+                u16::from_be_bytes([data[4], data[5]]),
+            ),
+            _ => panic!("Invalid bKGD chunk"),
+        }
+    }
+
+    fn parse_sbit(&self) -> Sbit {
+        let data = self.data.as_ref().unwrap();
+
+        match data.len() {
+            1 => Sbit::Grayscale(data[0]),
+            3 => Sbit::Truecolor(data[0], data[1], data[2]),
+            2 => Sbit::GrayscaleAlpha(data[0], data[1]),
+            4 => Sbit::TruecolorAlpha(data[0], data[1], data[2], data[3]),
+            _ => panic!("Invalid sBIT chunk"),
+        }
+    }
+
+    fn parse_itxt(&self) -> Itxt {
+        let data = self.data.as_ref().unwrap();
+
+        let keyword_end = data.iter().position(|&x| x == 0).unwrap();
+        let keyword = String::from_utf8(data[..keyword_end].to_vec()).unwrap();
+
+        let compression_flag = data[keyword_end + 1];
+        let compression_method = data[keyword_end + 2];
+
+        let language_tag_start = keyword_end + 3;
+        let language_tag_end = language_tag_start
+            + data[language_tag_start..]
+                .iter()
+                .position(|&x| x == 0)
+                .unwrap();
+
+        let language_tag =
+            String::from_utf8(data[language_tag_start..language_tag_end].to_vec()).unwrap();
+
+        let translated_keyword_start = language_tag_end + 1;
+        let translated_keyword_end = translated_keyword_start
+            + data[translated_keyword_start..]
+                .iter()
+                .position(|&x| x == 0)
+                .unwrap();
+
+        let translated_keyword =
+            String::from_utf8(data[translated_keyword_start..translated_keyword_end].to_vec())
+                .unwrap();
+
+        let text_start = translated_keyword_end + 1;
+        let text = data[text_start..].to_vec();
+
+        if compression_flag == 0 {
+            Itxt {
+                keyword,
+                compression_flag,
+                compression_method,
+                language_tag,
+                translated_keyword,
+                text: String::from_utf8(text).unwrap(),
+            }
+        } else {
+            let result = decompress(&text);
+
+            match result {
+                Ok(_) => Itxt {
+                    keyword,
+                    compression_flag,
+                    compression_method,
+                    language_tag,
+                    translated_keyword,
+                    text: String::from_utf8(result.unwrap()).unwrap(),
+                },
+                Err(e) => panic!("Error decompressing iTXt chunk: {}", e),
+            }
+        }
+    }
+
+    fn parse_text(&self) -> Text {
+        let data = self.data.as_ref().unwrap();
+
+        let keyword_end = data.iter().position(|&x| x == 0).unwrap();
+        let keyword = String::from_utf8(data[..keyword_end].to_vec()).unwrap();
+
+        let text = String::from_utf8(data[keyword_end + 1..].to_vec()).unwrap();
+
+        Text { keyword, text }
+    }
+
+    fn parse_ztxt(&self) -> Ztxt {
+        let data = self.data.as_ref().unwrap();
+
+        let keyword_end = data.iter().position(|&x| x == 0).unwrap();
+        let keyword = String::from_utf8(data[..keyword_end].to_vec()).unwrap();
+        let compression_method = data[keyword_end + 1];
+
+        let text = data[keyword_end + 2..].to_vec();
+
+        let result = decompress(&text);
+
+        match result {
+            Ok(_) => Ztxt {
+                keyword,
+                compression_method,
+                text: String::from_utf8(result.unwrap()).unwrap(),
+            },
+            Err(e) => panic!("Error decompressing zTXt chunk: {}", e),
+        }
     }
 }
 
