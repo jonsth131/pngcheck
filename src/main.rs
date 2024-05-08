@@ -5,6 +5,7 @@ use pngcheck::view::view_image;
 use std::error::Error;
 
 mod pretty_assert_printing;
+mod tui;
 
 //PNG check
 #[derive(Parser)]
@@ -17,6 +18,11 @@ enum Args {
     },
     ///View a PNG file
     View {
+        ///The PNG file to view
+        file: String,
+    },
+    //Use a UI to view PNG information
+    Ui {
         ///The PNG file to view
         file: String,
     },
@@ -36,13 +42,7 @@ fn print_banner() {
 fn print_chunks(chunks: &Vec<Chunk>) {
     for chunk in chunks {
         println!("=============== {} ===============", chunk.chunk_type);
-        println!("Chunk length: {:?}", chunk.length);
-        println!(
-            "CRC: {:?}, Valid: {:?}",
-            chunk.crc,
-            chunk.validate_checksum()
-        );
-        println!("Parsed chunk: {:?}", chunk.parse());
+        println!("{}", chunk);
     }
 }
 
@@ -71,6 +71,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
                 None => eprintln!("IHDR chunk not found"),
             }
+        }
+        Args::Ui { file } => {
+            let data = read_file(&file)?;
+            tui::tui(&data)?;
         }
     };
 

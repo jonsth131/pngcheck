@@ -1,6 +1,6 @@
 use crate::png::compression::decompress;
+use std::fmt::Display;
 
-#[derive(Debug)]
 pub enum ParsedChunk {
     IHDR(IHDR),
     PLTE(Vec<(u8, u8, u8)>),
@@ -20,6 +20,37 @@ pub enum ParsedChunk {
     Unknown(String, Option<Vec<u8>>),
 }
 
+impl Display for ParsedChunk {
+    fn fmt(
+        &self,
+        formatter: &mut std::fmt::Formatter<'_>,
+    ) -> std::result::Result<(), std::fmt::Error> {
+        let value = match self {
+            ParsedChunk::IHDR(ihdr) => ihdr.to_string(),
+            ParsedChunk::PLTE(plte) => format!("{:?}", plte),
+            ParsedChunk::IDAT => String::from("IDAT"),
+            ParsedChunk::IEND => String::from("IEND"),
+            ParsedChunk::Trns(trns) => format!("{:?}", trns),
+            ParsedChunk::Phys(phys) => format!("{:?}", phys),
+            ParsedChunk::Srgb(srgb) => format!("{:?}", srgb),
+            ParsedChunk::Gama(gama) => format!("{:?}", gama),
+            ParsedChunk::Bkgd(bkgd) => format!("{:?}", bkgd),
+            ParsedChunk::Sbit(sbit) => format!("{:?}", sbit),
+            ParsedChunk::Itxt(itxt) => format!("{:?}", itxt),
+            ParsedChunk::Text(text) => format!("{:?}", text),
+            ParsedChunk::Ztxt(ztxt) => format!("{:?}", ztxt),
+            ParsedChunk::Hist(hist) => format!("{:?}", hist),
+            ParsedChunk::Chrm(chrm) => format!("{:?}", chrm),
+            ParsedChunk::Unknown(chunk_type, data) => match data {
+                Some(data) => format!("{}: {:?}", chunk_type, data),
+                None => chunk_type.clone(),
+            },
+        };
+
+        formatter.write_str(value.as_str())
+    }
+}
+
 #[derive(Debug)]
 pub struct IHDR {
     pub width: u32,
@@ -29,6 +60,18 @@ pub struct IHDR {
     pub compression_method: CompressionMethod,
     pub filter_method: FilterMethod,
     pub interlace_method: InterlaceMethod,
+}
+
+impl Display for IHDR {
+    fn fmt(
+        &self,
+        formatter: &mut std::fmt::Formatter<'_>,
+    ) -> std::result::Result<(), std::fmt::Error> {
+        formatter.write_str(format!(
+            "Width: {}\nHeight: {}\nBit depth: {}\nColor type: {:?}\nCompression method: {:?}\nFilter method: {:?}\nInterlace method: {:?}",
+            self.width, self.height, self.bit_depth, self.color_type, self.compression_method, self.filter_method, self.interlace_method
+        ).as_str())
+    }
 }
 
 impl IHDR {
@@ -215,6 +258,24 @@ pub struct Chunk {
     pub chunk_type: String,
     pub data: Option<Vec<u8>>,
     pub crc: u32,
+}
+
+impl Display for Chunk {
+    fn fmt(
+        &self,
+        formatter: &mut std::fmt::Formatter<'_>,
+    ) -> std::result::Result<(), std::fmt::Error> {
+        formatter.write_str(
+            format!(
+                "Length: {}\nCRC: {}, Valid: {}\nParsed:\n{}",
+                self.length,
+                self.crc,
+                self.validate_checksum(),
+                self.parse()
+            )
+            .as_str(),
+        )
+    }
 }
 
 impl Chunk {
