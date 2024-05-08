@@ -56,12 +56,12 @@ fn parse_pixels(ihdr: &IHDR, plte: Option<&PLTE>, scanline: &[u8]) -> Vec<Pixel>
     match ihdr.color_type {
         super::ColorType::Indexed => {
             let plte = plte.unwrap();
-            let alpha = match &plte.transparency {
+            let alpha = match plte.transparency.clone() {
                 Some(transparency) => match transparency {
                     super::Transparency::Alpha(alpha) => alpha,
                     _ => panic!("Invalid transparency type"),
                 },
-                None => panic!("Transparency chunk not found"),
+                None => vec![],
             };
 
             return scanline

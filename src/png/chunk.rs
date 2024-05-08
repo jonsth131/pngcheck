@@ -8,7 +8,7 @@ pub enum ParsedChunk {
     Phys(Phys),
     Srgb(SrgbRenderingIntent),
     Gama(Gama),
-    Unknown(String),
+    Unknown(String, Option<Vec<u8>>),
 }
 
 #[derive(Debug)]
@@ -189,7 +189,7 @@ impl Chunk {
             "pHYs" => ParsedChunk::Phys(self.parse_phys()),
             "sRGB" => ParsedChunk::Srgb(self.parse_srgb()),
             "gAMA" => ParsedChunk::Gama(self.parse_gama()),
-            _ => ParsedChunk::Unknown(self.chunk_type.clone()),
+            _ => ParsedChunk::Unknown(self.chunk_type.clone(), self.data.clone()),
         }
     }
 

@@ -1,20 +1,15 @@
 use crate::png::scanline::Scanline;
 use crate::png::{ColorType, Pixel, IHDR};
 use image::{DynamicImage, GrayAlphaImage, GrayImage, RgbImage, RgbaImage};
+use std::cmp;
 use viuer::{print, Config};
 
 pub fn view_image(scanlines: &[Scanline], ihdr: &IHDR) {
     let config = Config {
         transparent: ihdr.color_type.has_alpha(),
-        width: Some(ihdr.width),
-        height: Some(ihdr.height),
+        width: Some(cmp::min(ihdr.width, 80)),
         ..Config::default()
     };
-
-    println!(
-        "Viewing image with width: {}, height: {}",
-        ihdr.width, ihdr.height
-    );
 
     let image = create_dynamic_image(scanlines, ihdr);
     print(&image, &config).unwrap();

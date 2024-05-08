@@ -17,7 +17,7 @@ pub enum Pixel {
     TruecolorAlpha(u8, u8, u8, u8),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Transparency {
     Grey(u16),
     Rgb(u16, u16, u16),
