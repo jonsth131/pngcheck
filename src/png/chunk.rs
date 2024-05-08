@@ -15,6 +15,8 @@ pub enum ParsedChunk {
     Itxt(Itxt),
     Text(Text),
     Ztxt(Ztxt),
+    Hist(Hist),
+    Chrm(Chrm),
     Unknown(String, Option<Vec<u8>>),
 }
 
@@ -194,6 +196,20 @@ pub struct Ztxt {
     pub text: String,
 }
 
+pub type Hist = Vec<u16>;
+
+#[derive(Debug)]
+pub struct Chrm {
+    pub white_point_x: u32,
+    pub white_point_y: u32,
+    pub red_x: u32,
+    pub red_y: u32,
+    pub green_x: u32,
+    pub green_y: u32,
+    pub blue_x: u32,
+    pub blue_y: u32,
+}
+
 pub struct Chunk {
     pub length: u32,
     pub chunk_type: String,
@@ -239,6 +255,8 @@ impl Chunk {
             "iTXt" => ParsedChunk::Itxt(self.parse_itxt()),
             "tEXt" => ParsedChunk::Text(self.parse_text()),
             "zTXt" => ParsedChunk::Ztxt(self.parse_ztxt()),
+            "hIST" => ParsedChunk::Hist(self.parse_hist()),
+            "cHRM" => ParsedChunk::Chrm(self.parse_chrm()),
             _ => ParsedChunk::Unknown(self.chunk_type.clone(), self.data.clone()),
         }
     }
@@ -398,6 +416,29 @@ impl Chunk {
                 text: String::from_utf8(result.unwrap()).unwrap(),
             },
             Err(e) => panic!("Error decompressing zTXt chunk: {}", e),
+        }
+    }
+
+    fn parse_hist(&self) -> Hist {
+        let data = self.data.as_ref().unwrap();
+
+        data.chunks_exact(2)
+            .map(|chunk| u16::from_be_bytes([chunk[0], chunk[1]]))
+            .collect()
+    }
+
+    fn parse_chrm(&self) -> Chrm {
+        let data = self.data.as_ref().unwrap();
+
+        Chrm {
+            white_point_x: u32::from_be_bytes([data[0], data[1], data[2], data[3]]),
+            white_point_y: u32::from_be_bytes([data[4], data[5], data[6], data[7]]),
+            red_x: u32::from_be_bytes([data[8], data[9], data[10], data[11]]),
+            red_y: u32::from_be_bytes([data[12], data[13], data[14], data[15]]),
+            green_x: u32::from_be_bytes([data[16], data[17], data[18], data[19]]),
+            green_y: u32::from_be_bytes([data[20], data[21], data[22], data[23]]),
+            blue_x: u32::from_be_bytes([data[24], data[25], data[26], data[27]]),
+            blue_y: u32::from_be_bytes([data[28], data[29], data[30], data[31]]),
         }
     }
 }
