@@ -12,7 +12,6 @@ pub const HEADER: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
 pub enum Pixel {
     Grayscale(u8),
     Truecolor(u8, u8, u8),
-    Indexed(u8, u8, u8),
     GrayscaleAlpha(u8, u8),
     TruecolorAlpha(u8, u8, u8, u8),
 }
@@ -41,6 +40,10 @@ impl Png {
             chunks,
             extra_bytes,
         }
+    }
+
+    pub fn color_type(&self) -> ColorType {
+        self.ihdr().map(|ihdr| ihdr.color_type).unwrap()
     }
 
     pub fn ihdr(&self) -> Option<IHDR> {
@@ -111,6 +114,17 @@ impl Png {
             ParsedChunk::Gama(gama) => Some(gama),
             _ => None,
         }
+    }
+
+    pub fn get_pixels(&self) -> Result<Vec<Pixel>, std::io::Error> {
+        let scanlines = self.get_scanlines()?;
+
+        let pixels = scanlines.iter().fold(vec![], |mut acc, scanline| {
+            acc.extend(scanline.pixels.iter().cloned());
+            acc
+        });
+
+        Ok(pixels)
     }
 
     pub fn get_scanlines(&self) -> Result<Vec<Scanline>, std::io::Error> {
