@@ -4,7 +4,7 @@ use crate::png::Pixel;
 use crate::png::Png;
 
 pub fn analyze(png: &Png) -> Result<HashMap<String, Vec<u8>>, Box<dyn std::error::Error>> {
-    let pixels = png.get_pixels()?[..50].to_vec();
+    let pixels = png.get_pixels()?.to_vec();
 
     match png.color_type() {
         crate::png::ColorType::Grayscale => {
@@ -59,6 +59,12 @@ fn analyze_truecolor(pixels: &Vec<Pixel>) -> HashMap<String, Vec<u8>> {
             let key = format!("r+g+b");
             let count = rgb_values.entry(key).or_insert(vec![]);
             count.push(r.wrapping_add(*g).wrapping_add(*b));
+
+            let key = format!("rgb");
+            let count = rgb_values.entry(key).or_insert(vec![]);
+            count.push(*r);
+            count.push(*g);
+            count.push(*b);
         }
         _ => {}
     });
